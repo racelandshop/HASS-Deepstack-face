@@ -23,7 +23,6 @@ from homeassistant.components.image_processing import (
     CONF_ENTITY_ID,
     CONF_NAME,
     CONF_SOURCE,
-    DOMAIN,
     PLATFORM_SCHEMA,
     ImageProcessingFaceEntity,
 )
@@ -56,7 +55,7 @@ DEFAULT_TIMEOUT = 10
 CLASSIFIER = "deepstack_face"
 DATA_DEEPSTACK = "deepstack_classifiers"
 FILE_PATH = "file_path"
-SERVICE_TEACH_FACE = "deepstack_teach_face"
+SERVICE_TEACH_FACE = "teach_face"
 
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
