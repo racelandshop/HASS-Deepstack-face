@@ -51,6 +51,7 @@ CONF_SHOW_BOXES = "show_boxes"
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
 DEFAULT_API_KEY = ""
 DEFAULT_TIMEOUT = 10
+DOMAIN = "deepstack_face"
 
 CLASSIFIER = "deepstack_face"
 DATA_DEEPSTACK = "deepstack_classifiers"
