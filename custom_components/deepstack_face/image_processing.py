@@ -251,20 +251,34 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
             self.total_faces = None
             self._matched = {}
 
+    def detect_number_of_faces(self, image) -> int:
+        """Returns the number of faces in the picture being processed"""
+        json = self._dsface.detect(image)
+        return (len(json))
+
     def teach(self, name: str, file_path: str):
         """Teach classifier a face name."""
         if not self.hass.config.is_allowed_path(file_path):
             return
+
         with open(file_path, "rb") as image:
-            self._dsface.register(name, image)
-            #fire an event to notify the frontend that the face was registered
+            n_face = self.detect_number_of_faces(image)
+            if n_face == 0: 
+                _LOGGER.info("No face detected in %s", file_path)
+            elif n_face >= 1: 
+                _LOGGER.info("Multiple faces detected in %s", file_path)
+            else: 
+                self._dsface.register(name, image)
+                _LOGGER.info("Deepstack face taught name : %s", name)
+                
+            #Fire an event to notify the frontend and pyscript
             event_data = {
                 "person_name": name, 
-                "image": file_path
+                "image": file_path, 
+                "faces": n_face
             }
             self.hass.bus.async_fire(f"{DOMAIN}_teach_face", event_data)
-            _LOGGER.info("Depstack face taught name : %s", name)
-
+            
 
     @property
     def camera_entity(self):
