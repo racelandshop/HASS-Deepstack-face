@@ -257,7 +257,14 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
             return
         with open(file_path, "rb") as image:
             self._dsface.register(name, image)
+            #fire an event to notify the frontend that the face was registered
+            event_data = {
+                "person_name": name, 
+                "image": file_path
+            }
+            self.hass.bus.async_fire(f"{DOMAIN}_teach_face", event_data)
             _LOGGER.info("Depstack face taught name : %s", name)
+
 
     @property
     def camera_entity(self):
