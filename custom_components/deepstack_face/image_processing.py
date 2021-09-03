@@ -33,6 +33,8 @@ from homeassistant.const import (
     CONF_PORT,
 )
 from homeassistant.core import split_entity_id
+from homeassistant.helpers.reload import setup_reload_service
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ DATETIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
 DEFAULT_API_KEY = ""
 DEFAULT_TIMEOUT = 10
 DOMAIN = "deepstack_face"
+PLATFORMS = ["image_processing"]
 
 CLASSIFIER = "deepstack_face"
 DATA_DEEPSTACK = "deepstack_classifiers"
@@ -115,6 +118,9 @@ def get_faces(predictions: list, img_width: int, img_height: int):
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Set up the classifier."""
+
+    setup_reload_service(hass, DOMAIN, PLATFORMS)
+
     if DATA_DEEPSTACK not in hass.data:
         hass.data[DATA_DEEPSTACK] = []
 
@@ -163,6 +169,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     hass.services.register(
         DOMAIN, SERVICE_TEACH_FACE, service_handle, schema=SERVICE_TEACH_SCHEMA
     )
+
 
 
 class FaceClassifyEntity(ImageProcessingFaceEntity):

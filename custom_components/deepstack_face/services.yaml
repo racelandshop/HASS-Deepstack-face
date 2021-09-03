@@ -20,3 +20,6 @@ teach_face:
         entity:
           integration: deepstack_face
           domain: image_processing
+reload:
+  name: Reload
+  description: Reload all generic entities.
