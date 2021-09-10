@@ -270,12 +270,14 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
 
         with open(file_path, "rb") as image:
             n_face = self.detect_number_of_faces(image)
+        
+        with open(file_path, "rb") as image1:
             if n_face == 0: 
                 _LOGGER.info("No face detected in %s", file_path)
             elif n_face > 1: 
                 _LOGGER.info("Multiple faces detected in %s", file_path)
-            else: 
-                self._dsface.register(name, image)
+            else:
+                self._dsface.register(name, image1)
                 _LOGGER.info("Deepstack face taught name : %s", name)
                 
             #Fire an event to notify the frontend and pyscript
@@ -372,3 +374,4 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
             timestamp_save_path = directory / f"{self._name}_{self._last_detection}.jpg"
             pil_image.save(timestamp_save_path)
             _LOGGER.info("Deepstack saved file %s", timestamp_save_path)
+
