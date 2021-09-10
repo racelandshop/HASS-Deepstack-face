@@ -272,7 +272,7 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
             n_face = self.detect_number_of_faces(image)
             if n_face == 0: 
                 _LOGGER.info("No face detected in %s", file_path)
-            elif n_face >= 1: 
+            elif n_face > 1: 
                 _LOGGER.info("Multiple faces detected in %s", file_path)
             else: 
                 self._dsface.register(name, image)
