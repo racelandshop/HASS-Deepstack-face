@@ -8,9 +8,10 @@ import io
 import logging
 import re
 import time
+import os
 from pathlib import Path
 
-import requests
+
 from PIL import Image, ImageDraw
 
 import deepstack.core as ds
@@ -47,6 +48,7 @@ CONF_DETECT_ONLY = "detect_only"
 CONF_SAVE_FILE_FOLDER = "save_file_folder"
 CONF_SAVE_TIMESTAMPTED_FILE = "save_timestamped_file"
 CONF_SAVE_FACES_FOLDER = "save_faces_folder"
+CONF_PREVIEW_FACES_FOLDER = "preview_faces_folder"
 CONF_SAVE_FACES = "save_faces"
 CONF_SHOW_BOXES = "show_boxes"
 
@@ -66,6 +68,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_IP_ADDRESS): cv.string,
         vol.Required(CONF_PORT): cv.port,
+        vol.Optional(CONF_PREVIEW_FACES_FOLDER): cv.isdir, 
         vol.Optional(CONF_API_KEY, default=DEFAULT_API_KEY): cv.string,
         vol.Optional(CONF_TIMEOUT, default=DEFAULT_TIMEOUT): cv.positive_int,
         vol.Optional(CONF_DETECT_ONLY, default=False): cv.boolean,
@@ -85,6 +88,12 @@ SERVICE_TEACH_SCHEMA = vol.Schema(
     }
 )
 
+DRAW_PREVIEW_FACE_SCHEMA = vol.Schema(
+    {
+        vol.Required(FILE_PATH): cv.string,
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+    }
+)
 
 def get_valid_filename(name: str) -> str:
     return re.sub(r"(?u)[^-\w.]", "", str(name).strip().replace(" ", "_"))
@@ -146,6 +155,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
             config.get(CONF_SAVE_FACES),
             config[CONF_SHOW_BOXES],
             camera[CONF_ENTITY_ID],
+            config.get(CONF_PREVIEW_FACES_FOLDER),
             camera.get(CONF_NAME),
         )
         entities.append(face_entity)
@@ -165,11 +175,34 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
             name = service.data.get(ATTR_NAME)
             file_path = service.data.get(FILE_PATH)
             classifier.teach(name, file_path)
+    
+    def service_draw_boxes_on_preview(service):
+        """Service to perform recognition of the number of faces in a picture and draw the boxes. 
+        Also keeps internaly in the component the number of faces in the picture."""
+        entity_id = service.data.get(ATTR_ENTITY_ID)
+        classifier = None
+        for putative_classifier in hass.data[DATA_DEEPSTACK]:
+            if putative_classifier.entity_id == entity_id:
+                classifier = putative_classifier
+                break
+
+        ##Make sure the entity ID exists
+        if classifier == None:
+            _LOGGER.error("Entity not found")
+            return
+                
+        
+        file_path = service.data.get(FILE_PATH)
+        classifier.draw_boxes_on_preview(file_path)
+                
 
     hass.services.register(
         DOMAIN, SERVICE_TEACH_FACE, service_handle, schema=SERVICE_TEACH_SCHEMA
     )
 
+    hass.services.register(
+        DOMAIN, "draw_boxes_on_preview", service_draw_boxes_on_preview, schema=DRAW_PREVIEW_FACE_SCHEMA,
+    )
 
 
 class FaceClassifyEntity(ImageProcessingFaceEntity):
@@ -188,6 +221,7 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
         save_faces,
         show_boxes,
         camera_entity,
+        preview_folder,
         name=None,
     ):
         """Init with the API key and model id."""
@@ -202,7 +236,9 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
         self._save_timestamped_file = save_timestamped_file
         self._save_faces_folder = save_faces_folder
         self._save_faces = save_faces
-
+        self._n_faces_latest_preview = None #Keeps track of the number of faces in the lastest picture in the preview
+        self._preview_image_folder = preview_folder
+        self._preview_mode = False ##Add the preview folder
         self._camera = camera_entity
         if name:
             self._name = name
@@ -254,23 +290,53 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
                 self.save_image(
                     pil_image, self._save_file_folder,
                 )
-        else:
-            self.total_faces = None
-            self._matched = {}
+        
+        if self._preview_mode: 
+            directory = self._preview_image_folder
+            timestamp_save_path = os.path.join(directory, self._preview_image_path)
+            pil_image.save(timestamp_save_path)
 
-    def detect_number_of_faces(self, image) -> int:
-        """Returns the number of faces in the picture being processed"""
-        json = self._dsface.detect(image)
-        return (len(json))
+
+    def draw_boxes_on_preview(self, file_path):
+        """Open an image, and draw boxes on preview. Also keeps track of the number of faces in that picture."""
+        self._preview_mode = True
+        self._preview_image_path = file_path.split(".")[0] + "_preview.jpeg"
+        self.total_faces = None
+        try: 
+            self.process_image(open(file_path, "rb").read())
+        except ds.DeepstackException as exc:
+            return
+        
+        total_faces = self.total_faces
+        if total_faces == None: #If there are faces in the picture
+            _LOGGER.info("No faces were detected in the picture")
+        else: 
+            self._n_faces_latest_preview = self.total_faces
+
+        self._preview_image_path = None
+        self._preview_mode = False
+        self.total_faces = None
+
+
+    def detect_faces(self, image) -> int:
+        """Returns the faces in the picture being processed"""
+        return self._dsface.detect(image)
+        
 
     def teach(self, name: str, file_path: str):
         """Teach classifier a face name."""
         if not self.hass.config.is_allowed_path(file_path):
             return
 
-        with open(file_path, "rb") as image:
-            n_face = self.detect_number_of_faces(image)
+        #Run recognition if this variable is set to none
+        if self._n_faces_latest_preview == None:
+            with open(file_path, "rb") as image:
+                n_face = len(self.detect_faces(image))
+        else: 
+            n_face = self._n_faces_latest_preview
         
+
+        #Note: The same image needs to be opened twice for the request to work
         with open(file_path, "rb") as image1:
             if n_face == 0: 
                 _LOGGER.info("No face detected in %s", file_path)
@@ -278,15 +344,16 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
                 _LOGGER.info("Multiple faces detected in %s", file_path)
             else:
                 self._dsface.register(name, image1)
+                self._n_faces_latest_preview = None #Set this value to None if the face was taught correctly
                 _LOGGER.info("Deepstack face taught name : %s", name)
                 
-            #Fire an event to notify the frontend and pyscript
-            event_data = {
-                "person_name": name, 
-                "image": file_path, 
-                "faces": n_face
-            }
-            self.hass.bus.async_fire(f"{DOMAIN}_teach_face", event_data)
+        #Fire an event to notify the frontend and pyscript
+        event_data = {
+            "person_name": name, 
+            "image": file_path, 
+            "faces": n_face
+        }
+        self.hass.bus.async_fire(f"{DOMAIN}_teach_face", event_data)
             
 
     @property
@@ -325,6 +392,8 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
             attr["matched_faces"] = self._matched
         if self._last_detection:
             attr["last_detection"] = self._last_detection
+        if self._camera:
+            attr["camera_entity"] = self._camera
         return attr
 
 
@@ -365,13 +434,21 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
                 color=RED,
             )
 
-        latest_save_path = (
-            directory / f"{get_valid_filename(self._name).lower()}_latest.jpg"
-        )
-        pil_image.save(latest_save_path)
+        #@zroger499. If running on preview mode do not save as latest image
+        if self._preview_mode == False:
+            latest_save_path = (
+                directory / f"{get_valid_filename(self._name).lower()}_latest.jpg"
+            )
+            pil_image.save(latest_save_path)
 
         if self._save_timestamped_file:
-            timestamp_save_path = directory / f"{self._name}_{self._last_detection}.jpg"
+            if self._preview_mode == True:
+                directory = self._preview_image_folder
+                timestamp_save_path = os.path.join(directory, self._preview_image_path)
+            else: 
+                timestamp_save_path = directory / f"{self._name}_{self._last_detection}.jpg"
+            
             pil_image.save(timestamp_save_path)
             _LOGGER.info("Deepstack saved file %s", timestamp_save_path)
 
+        

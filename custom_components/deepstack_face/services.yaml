@@ -23,3 +23,16 @@ teach_face:
 reload:
   name: Reload
   description: Reload all generic entities.
+draw_boxes_on_preview: 
+  name: draw_boxes_on_preview image
+  fields: 
+    file_path:
+      description: File on local filesystem to upload
+      example: /config/images/idris.jpg
+      selector: 
+        text:
+    entity_id:
+      description: Name entity.
+      selector:
+        entity:
+          domain: image_processing
