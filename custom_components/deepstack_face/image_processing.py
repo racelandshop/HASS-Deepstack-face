@@ -10,6 +10,7 @@ import re
 import time
 import os
 from pathlib import Path
+from typing import Optional
 
 
 from PIL import Image, ImageDraw
@@ -32,6 +33,7 @@ from homeassistant.const import (
     ATTR_NAME,
     CONF_IP_ADDRESS,
     CONF_PORT,
+    CONF_NAME,
 )
 from homeassistant.core import split_entity_id
 from homeassistant.helpers.reload import setup_reload_service
@@ -156,7 +158,6 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
             config[CONF_SHOW_BOXES],
             camera[CONF_ENTITY_ID],
             config.get(CONF_PREVIEW_FACES_FOLDER),
-            camera.get(CONF_NAME),
         )
         entities.append(face_entity)
         hass.data[DATA_DEEPSTACK].append(face_entity)
@@ -207,6 +208,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 
 class FaceClassifyEntity(ImageProcessingFaceEntity):
     """Perform a face classification."""
+    _attr_icon = "mdi:face-recognition"
 
     def __init__(
         self,
@@ -244,7 +246,7 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
             self._name = name
         else:
             camera_name = split_entity_id(camera_entity)[1]
-            self._name = "{} {}".format(CLASSIFIER, camera_name)
+            self._name = "{}_{}".format(CLASSIFIER, camera_name)
         self._predictions = []
         self._matched = {}
         self.total_faces = None
@@ -363,7 +365,7 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
 
     @property
     def name(self):
-        """Return the name of the sensor."""
+        """Return the name of the image processing."""
         return self._name
 
     @property
@@ -394,6 +396,7 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
             attr["last_detection"] = self._last_detection
         if self._camera:
             attr["camera_entity"] = self._camera
+        attr["domain"] = DOMAIN
         return attr
 
 
