@@ -298,7 +298,6 @@ class FaceClassifyEntity(ImageProcessingFaceEntity):
             timestamp_save_path = os.path.join(directory, self._preview_image_path)
             pil_image.save(timestamp_save_path)
 
-
     def draw_boxes_on_preview(self, file_path):
         """Open an image, and draw boxes on preview. Also keeps track of the number of faces in that picture."""
         self._preview_mode = True
